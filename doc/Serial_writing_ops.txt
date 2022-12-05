@@ -1,0 +1,12 @@
+Serial.println()
+
+    Formatiert die Daten zuerst (z.B. konvertiert Integer zu Ascii), hängt ein \r (Carriage Return) und \n (NewLine) am Ende an
+    und schreibt diese dann in die Serielle Schnittstelle.
+
+Serial.print()
+
+   Dasselbe wie Serial.println() ohne \r\n.
+
+Serial.write()
+
+   Formatiert keine Daten und schreibt alle Werte eins zu eins an die Serielle Schnittstelle.
