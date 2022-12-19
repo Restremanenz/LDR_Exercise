@@ -1,5 +1,7 @@
 #include <Arduino.h>
 
+#include "fir.h"
+
 #define LDR_PIN A0
 #define ADC_RESOLUTION 1024  // 10 bit
 #define MEASURE_INTERVAL 10 // ms
@@ -25,9 +27,10 @@
 typedef struct {
   uint16_t adc;
   float voltage;
-  float lux[3];
+  float lux[3 > LENGTH(fir_weights) ? 3 : LENGTH(fir_weights)];
   float luxf;
   float lux_notch[2];
+  float lux_fir;
 } ldr_t;
 
 ldr_t ldr = {0};
@@ -50,8 +53,8 @@ void loop() {
   if (mills - last_measured >= MEASURE_INTERVAL) {
     last_measured = mills;
 
-    float lux, lux_notch;
-    lux = lux_notch = 0.f;
+    float lux, lux_notch, lux_fir;
+    lux = lux_notch = lux_fir = 0.f;
 
     ldr.adc     = analogRead(LDR_PIN);
     ldr.voltage = SUPPLY_VOLTAGE / (ADC_RESOLUTION - 1) * (float)ldr.adc;
@@ -67,6 +70,11 @@ void loop() {
                   NOTCH_WEIGHT5 * ldr.lux[2];
 
     shift_array(ldr.lux_notch, LENGTH(ldr.lux_notch), lux_notch);
+  
+    for (size_t i = 0; i < LENGTH(fir_weights); ++i) {
+      lux_fir += ldr.lux[i] * fir_weights[i];
+    }
+    ldr.lux_fir = lux_fir;
   }
 
   if (mills - last_printed >= PRINT_INTERVAL) {
@@ -93,5 +101,7 @@ void print_vals(void)
   Serial.print(ldr.luxf, 3);
   Serial.write(' ');
   Serial.print(ldr.lux_notch[0], 3);
+  Serial.write(' ');
+  Serial.print(ldr.lux_fir, 3);
   Serial.write(';');
 }
