@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <SoftwareSerial.h>
+#include <avr/interrupt.h>
 
 #include "fir.h"
 
@@ -27,7 +28,9 @@
 #define DATA_PACKET_LENGTH 11
 #define WORK_STATION_NUMBER 0x2
 
-SoftwareSerial sws(2, 3);
+#define INTERRUPT_PIN digitalPinToInterrupt(2)
+
+SoftwareSerial sws(4, 3, true);
 
 
 typedef struct {
@@ -42,16 +45,19 @@ typedef struct {
 ldr_t ldr = {0};
 
 unsigned long mills, last_measured, last_printed;
+uint8_t flag;
 
 void shift_array(float array[], size_t len, float val);
 void print_vals(void);
 void send_data(int work_station_nr, int lux);
+void set_flag();
 
 void setup() {
   Serial.begin(BAUD_RATE);
   while (!Serial);
 
   sws.begin(BAUD_RATE2);
+  attachInterrupt(INTERRUPT_PIN, set_flag, RISING);
 
   mills = last_measured = last_printed = millis();
 }
@@ -86,9 +92,11 @@ void loop() {
     ldr.lux_fir = lux_fir;
   }
 
-  if (mills - last_printed >= PRINT_INTERVAL) {
-  	last_printed = mills;
+  if (flag && mills - last_printed >= PRINT_INTERVAL) {
+    flag = 0x00;
+  	// last_printed = mills;
     // print_vals();
+    Serial.println("Hello World!");
 
     send_data(WORK_STATION_NUMBER, ldr.lux[0]);
   }
@@ -122,4 +130,10 @@ void send_data(int work_station_nr, int lux)
   sprintf(data, "A%02dH%dC%02d!", work_station_nr, lux, 0);
   for (unsigned char c = 0; c < DATA_PACKET_LENGTH; ++c)
     sws.write(data[c]);
+}
+
+void set_flag()
+{
+  flag = 0xFF;
+  last_printed = mills;
 }
