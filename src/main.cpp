@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <SoftwareSerial.h>
 
 #include "fir.h"
 
@@ -7,6 +8,7 @@
 #define MEASURE_INTERVAL 10 // ms
 #define SUPPLY_VOLTAGE 5.f
 #define BAUD_RATE 115200
+#define BAUD_RATE2 300
 
 #define LENGTH(a) (sizeof a / sizeof a[0])
 
@@ -21,7 +23,11 @@
 #define NOTCH_WEIGHT4 -1.5687f
 #define NOTCH_WEIGHT5 0.9695f
 
-#define PRINT_INTERVAL 15  //ms
+#define PRINT_INTERVAL 1000  //ms
+#define DATA_PACKET_LENGTH 11
+#define WORK_STATION_NUMBER 0x2
+
+SoftwareSerial sws(2, 3);
 
 
 typedef struct {
@@ -39,10 +45,13 @@ unsigned long mills, last_measured, last_printed;
 
 void shift_array(float array[], size_t len, float val);
 void print_vals(void);
+void send_data(int work_station_nr, int lux);
 
 void setup() {
   Serial.begin(BAUD_RATE);
   while (!Serial);
+
+  sws.begin(BAUD_RATE2);
 
   mills = last_measured = last_printed = millis();
 }
@@ -79,8 +88,9 @@ void loop() {
 
   if (mills - last_printed >= PRINT_INTERVAL) {
   	last_printed = mills;
+    // print_vals();
 
-    print_vals();
+    send_data(WORK_STATION_NUMBER, ldr.lux[0]);
   }
 }
 
@@ -104,4 +114,12 @@ void print_vals(void)
   Serial.write(' ');
   Serial.print(ldr.lux_fir, 3);
   Serial.write(';');
+}
+
+void send_data(int work_station_nr, int lux)
+{
+  char data[DATA_PACKET_LENGTH];
+  sprintf(data, "A%02dH%dC%02d!", work_station_nr, lux, 0);
+  for (unsigned char c = 0; c < DATA_PACKET_LENGTH; ++c)
+    sws.write(data[c]);
 }
