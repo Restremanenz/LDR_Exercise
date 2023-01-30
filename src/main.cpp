@@ -25,6 +25,7 @@
 #define NOTCH_WEIGHT5 0.9695f
 
 #define PRINT_INTERVAL 1000  //ms
+#define SEND_COMPRESSED
 #define DATA_PACKET_LENGTH 11
 #define WORK_STATION_NUMBER 0x2
 
@@ -50,6 +51,7 @@ uint8_t flag;
 void shift_array(float array[], size_t len, float val);
 void print_vals(void);
 void send_data(int work_station_nr, int lux);
+uint8_t calc_crc(uint16_t data);
 void set_flag();
 
 void setup() {
@@ -96,7 +98,6 @@ void loop() {
     flag = 0x00;
   	// last_printed = mills;
     // print_vals();
-    Serial.println("Hello World!");
 
     send_data(WORK_STATION_NUMBER, ldr.lux[0]);
   }
@@ -126,10 +127,38 @@ void print_vals(void)
 
 void send_data(int work_station_nr, int lux)
 {
+#ifdef SEND_COMPRESSED
+  uint32_t frame;
+  frame  = work_station_nr;
+  frame |= (lux >> 4);
+  frame |= ((uint32_t)calc_crc(frame) >> 2*8);
+  sws.write((frame << 0*8) & 0xFF);
+  sws.write((frame << 1*8) & 0xFF);
+  sws.write((frame << 2*8) & 0xFF);
+#else
   char data[DATA_PACKET_LENGTH];
   sprintf(data, "A%02dH%dC%02d!", work_station_nr, lux, 0);
   for (unsigned char c = 0; c < DATA_PACKET_LENGTH; ++c)
     sws.write(data[c]);
+#endif
+}
+
+uint8_t calc_crc(uint16_t data)
+{
+    uint8_t crc = 0xff;
+
+    size_t i, j;
+    for (i = 0; i < 2; i++) {
+        crc ^= data;
+        data <<= 1;
+        for (j = 0; j < 8; j++) {
+            if ((crc & 0x80))
+                crc = (uint8_t)((crc << 1) ^ 0x31);
+            else
+                crc <<= 1;
+        }
+    }
+    return crc;
 }
 
 void set_flag()
