@@ -30,8 +30,9 @@
 #define WORK_STATION_NUMBER 0x2
 
 #define INTERRUPT_PIN digitalPinToInterrupt(2)
+#define SS_TX_PIN 3
 
-SoftwareSerial sws(4, 3, true);
+SoftwareSerial sws(4, SS_TX_PIN, true);
 
 
 typedef struct {
@@ -51,7 +52,7 @@ uint8_t flag;
 void shift_array(float array[], size_t len, float val);
 void print_vals(void);
 void send_data(int work_station_nr, int lux);
-uint8_t calc_crc(uint16_t data);
+uint8_t calc_crc(uint8_t *data, size_t len);
 void set_flag();
 
 void setup() {
@@ -128,13 +129,27 @@ void print_vals(void)
 void send_data(int work_station_nr, int lux)
 {
 #ifdef SEND_COMPRESSED
-  uint32_t frame;
-  frame  = work_station_nr;
-  frame |= (lux >> 4);
-  frame |= ((uint32_t)calc_crc(frame) >> 2*8);
-  sws.write((frame << 0*8) & 0xFF);
-  sws.write((frame << 1*8) & 0xFF);
-  sws.write((frame << 2*8) & 0xFF);
+  // a = workstation bit, A = MSB
+  // b = lux bit, B = MSB
+  // c = crc bit, C = MSB
+  // frame = Aaaa Bbbb bbbb bbbb Cccc cccc
+  // store bits big endian?
+  lux = 69;
+  uint8_t frame[3];
+  frame[0] = ((lux >> 8) & 0xF) | ((work_station_nr & 0xF) << 4);
+  frame[1] = lux & 0xFF;
+  frame[2] = calc_crc(frame, 2);
+  sws.write(frame[0]);
+  sws.write(frame[1]);
+  sws.write(frame[2]);
+
+  for (size_t j = 0; j < 3; j++) {
+    for (size_t i = 0; i < 8; i++) {
+      if (i % 4 == 0) Serial.write(" ");
+      Serial.write(((frame[j] >> (7- i)) & 0x1) + '0');
+    }
+  }
+  Serial.println();
 #else
   char data[DATA_PACKET_LENGTH];
   sprintf(data, "A%02dH%dC%02d!", work_station_nr, lux, 0);
@@ -143,17 +158,17 @@ void send_data(int work_station_nr, int lux)
 #endif
 }
 
-uint8_t calc_crc(uint16_t data)
+// from https://en.wikipedia.org/wiki/Computation_of_cyclic_redundancy_checks#Bit_ordering_(endianness)
+uint8_t calc_crc(uint8_t *data, size_t len)
 {
-    uint8_t crc = 0xff;
+    uint8_t crc = 0x0;
 
     size_t i, j;
-    for (i = 0; i < 2; i++) {
-        crc ^= data;
-        data <<= 1;
+    for (i = 0; i < len; i++) {
+        crc ^= data[i];
         for (j = 0; j < 8; j++) {
             if ((crc & 0x80))
-                crc = (uint8_t)((crc << 1) ^ 0x31);
+                crc = (uint8_t)((crc << 1) ^ 0x);
             else
                 crc <<= 1;
         }
